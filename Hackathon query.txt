@@ -1,0 +1,674 @@
+/*select
+distinct s.id,
+sc.course_type,
+case 
+  when delivery_channel = 'L' then TRUE
+  when delivery_channel = 'M' then FALSE
+  else is_laptop
+end as trial_delivery_channel,
+case when s.referral_code is not null or sad.utm_source like '%whjr.site' or sad.utm_campaign = 'Report_Card' then 'Referral' else 'Non-Referral' end as Referral_Flag,
+ci.class_type,
+emi_non_emi,
+sum(0) as week_num,
+sum(0) as projects_completed,
+sum(0) as project_rating,
+sum(0) as quiz_completed,
+sum(0) as quiz_score,
+sum(0) as booked,
+sum(0) as consumed,
+sum(0) as cancelled,
+sum(0) as count_of_absent,
+sum(0) as revenue,
+sum(0) as credits_purchased,
+sum(0) as credits_refunded
+
+
+from main_db_v1_v2_main_prod_db.student as s
+join main_db_v1_v2_main_prod_db.student_course sc on sc.student_id=s.id and sc.record_status=1
+join main_db_v1_v2_main_prod_db.course_item as ci on ci.id = sc.course_item_id and ci.record_status = 1 
+join main_db_v1_v2_main_prod_db.course as c on c.id = ci.course_id and c.record_status = 1 
+left join main_db_v1_v2_main_prod_db.student_additional_detail sad on sad.student_id=s.id and sad.record_status=1
+left join 
+(
+select
+student_id,
+c.course_type,
+delivery_channel
+from main_db_v1_v2_main_prod_db.class_booking as cb 
+join main_db_v1_v2_main_prod_db.course_item as ci on ci.id = cb.course_item_id and ci.record_status = 1 
+join main_db_v1_v2_main_prod_db.course as c on c.id = ci.course_id and c.record_status = 1
+where cb.record_status=1 and cb.status='completed' and cb.is_trial=1
+) cb1 on cb1.student_id = s.id and cb1.course_type = sc.course_type
+
+join
+(select 
+om1.student_id,
+cc.course_type,
+sum(om1.final_inr_amount) as revenue
+from main_db_v1_v2_main_prod_db.order_master om1 
+join main_db_v1_v2_main_prod_db.course_item as ci on om1.course_item_id = ci.id and ci.record_status=1
+join main_db_v1_v2_main_prod_db.course as cc on cc.id = ci.course_id and cc.record_status = 1 
+where om1.record_status = 1 and om1.status = 'confirmed' and om1.final_inr_amount > 200 
+group by 1,2
+) as om1 on om1.student_id = s.id and om1.course_type=c.course_type
+
+left JOIN
+(
+select
+student_id,
+course_type,
+case when emi_flag>0 then 'EMI' else 'NON_EMI' end as emi_non_emi
+from
+(
+select
+om.student_id,
+c.course_type,
+sum(case when lower(tm.instrument) like '%emi%' then 1 else 0 end) as emi_flag
+from main_db_v1_v2_main_prod_db.order_master om 
+join main_db_v1_v2_main_prod_db.course_item as ci on ci.id = om.course_item_id and ci.record_status=1
+join main_db_v1_v2_main_prod_db.course as c on c.id = ci.course_id and c.record_status=1
+join main_db_v1_v2_main_prod_db.transaction_master tm on tm.order_id=om.id and tm.status='confirmed' and tm.record_status=1
+where om.record_status=1 and om.status='confirmed' and om.final_inr_amount>99
+group by 1,2
+)
+) emi on emi.student_id=s.id and emi.course_type=sc.course_type
+
+where and s.country_code='IN' and sc.is_trial = 0
+*/
+/*
+
+*/
+
+set query_group to LongQuery;
+
+SELECT 
+s_id,
+course_type,
+trial_delivery_channel,
+Referral_Flag,
+class_type,
+emi_non_emi,
+week_num,
+sum(projects_completed) as projects_completed,
+sum(project_rating) as project_rating,
+sum(quiz_completed) as quiz_completed,
+sum(quiz_score) as quiz_score,
+sum(booked) as booked,
+sum(consumed) as consumed,
+sum(cancelled) as cancelled,
+sum(count_of_absent) as count_of_absent,
+sum(revenue) as revenue,
+sum(credits_purchased) as credits_purchased,
+sum(credits_refunded) as credits_refunded
+
+from
+(
+--paid class bookings
+select
+distinct cb.student_id as s_id,
+c.course_type,
+st.trial_delivery_channel,
+st.Referral_Flag,
+st.class_type,
+st.emi_non_emi,
+DATEPART(week,date(convert_timezone('UTC','Asia/Kolkata',cb.start_time))) as week_num,
+sum(0) as projects_completed,
+sum(0) as project_rating,
+sum(0) as quiz_completed,
+sum(0) as quiz_score,
+count(distinct cb.id) as booked,
+sum(0) as consumed,
+sum(0) as cancelled,
+sum(0) as count_of_absent,
+sum(0) as revenue,
+sum(0) as credits_purchased,
+sum(0) as credits_refunded
+
+from main_db_v1_v2_main_prod_db.class_booking as cb 
+join main_db_v1_v2_main_prod_db.course_item as ci on ci.id = cb.course_item_id and ci.record_status=1
+join main_db_v1_v2_main_prod_db.course as c on c.id = ci.course_id
+join
+(select
+distinct s.id,
+sc.course_type,
+case 
+  when delivery_channel = 'L' then TRUE
+  when delivery_channel = 'M' then FALSE
+  else is_laptop
+end as trial_delivery_channel,
+case when s.referral_code is not null or sad.utm_source like '%whjr.site' or sad.utm_campaign = 'Report_Card' then 'Referral' else 'Non-Referral' end as Referral_Flag,
+ci.class_type,
+emi_non_emi,
+sum(0) as week_num,
+sum(0) as projects_completed,
+sum(0) as project_rating,
+sum(0) as quiz_completed,
+sum(0) as quiz_score,
+sum(0) as consumed,
+sum(0) as cancelled,
+sum(0) as count_of_absent,
+sum(0) as revenue,
+sum(0) as credits_purchased,
+sum(0) as credits_refunded
+
+
+from main_db_v1_v2_main_prod_db.student as s
+join main_db_v1_v2_main_prod_db.student_course sc on sc.student_id=s.id and sc.record_status=1
+join main_db_v1_v2_main_prod_db.course_item as ci on ci.id = sc.course_item_id and ci.record_status = 1 
+join main_db_v1_v2_main_prod_db.course as c on c.id = ci.course_id and c.record_status = 1 
+left join main_db_v1_v2_main_prod_db.student_additional_detail sad on sad.student_id=s.id and sad.record_status=1
+left join 
+(
+select
+student_id,
+c.course_type,
+delivery_channel
+from main_db_v1_v2_main_prod_db.class_booking as cb 
+join main_db_v1_v2_main_prod_db.course_item as ci on ci.id = cb.course_item_id and ci.record_status = 1 
+join main_db_v1_v2_main_prod_db.course as c on c.id = ci.course_id and c.record_status = 1
+where cb.record_status=1 and cb.status='completed' and cb.is_trial=1
+) cb1 on cb1.student_id = s.id and cb1.course_type = sc.course_type
+
+join
+(select 
+om1.student_id,
+cc.course_type,
+sum(om1.final_inr_amount) as revenue
+from main_db_v1_v2_main_prod_db.order_master om1 
+join main_db_v1_v2_main_prod_db.course_item as ci on om1.course_item_id = ci.id and ci.record_status=1
+join main_db_v1_v2_main_prod_db.course as cc on cc.id = ci.course_id and cc.record_status = 1 
+where om1.record_status = 1 and om1.status = 'confirmed' and om1.final_inr_amount > 200 
+group by 1,2
+) as om1 on om1.student_id = s.id and om1.course_type=c.course_type
+
+left JOIN
+(
+select
+student_id,
+course_type,
+case when emi_flag>0 then 'EMI' else 'NON_EMI' end as emi_non_emi
+from
+(
+select
+om.student_id,
+c.course_type,
+sum(case when lower(tm.instrument) like '%emi%' then 1 else 0 end) as emi_flag
+from main_db_v1_v2_main_prod_db.order_master om 
+join main_db_v1_v2_main_prod_db.course_item as ci on ci.id = om.course_item_id and ci.record_status=1
+join main_db_v1_v2_main_prod_db.course as c on c.id = ci.course_id and c.record_status=1
+join main_db_v1_v2_main_prod_db.transaction_master tm on tm.order_id=om.id and tm.status='confirmed' and tm.record_status=1
+where om.record_status=1 and om.status='confirmed' and om.final_inr_amount>99
+group by 1,2
+)
+) emi on emi.student_id=s.id and emi.course_type=sc.course_type
+
+where s.country_code='IN' and sc.is_trial = 0 group by 1,2,3,4,5,6) as st on st.id=cb.student_id and st.course_type=c.course_type
+
+where cb.is_trial=0 and cb.record_status=1 and date(convert_timezone('UTC','Asia/Kolkata',cb.start_time)) between '2021-04-01' and '2021-08-10'
+group by 1,2,3,4,5,6,7
+
+UNION
+--Paid Class consumed
+select 
+distinct cb.student_id as s_id,
+c.course_type,
+st.trial_delivery_channel,
+st.Referral_Flag,
+st.class_type,
+st.emi_non_emi,
+DATEPART(week,date(convert_timezone('UTC','Asia/Kolkata',cch.updated_at))) as week_num,
+sum(0) as projects_completed,
+sum(0) as project_rating,
+sum(0) as quiz_completed,
+sum(0) as quiz_score,
+sum(0) as booked,
+sum(case when (amount>0 and sb.status='completed') then amount end) as consumed,
+sum(case when (amount>0 and sb.status='cancelled') then amount end) as cancelled,
+sum(case when (amount>0 and sb.status<>'cancelled' and sb.status<>'completed')  then amount end) as count_of_absent,
+sum(0) as revenue,
+sum(0) as credits_purchased,
+sum(0) as credits_refunded
+
+from main_db_v1_v2_main_prod_db.class_booking cb 
+join main_db_v1_v2_main_prod_db.student_booking sb on sb.booking_id =cb.id and sb.record_status =1
+join main_db_v1_v2_main_prod_db.course_credit_history cch on cch.booking_id = cb.id and cch.student_id =sb.student_id and cch.record_status =1 and cch.amount=1
+join main_db_v1_v2_main_prod_db.student s on s.id=sb.student_id and sb.record_status =1
+join main_db_v1_v2_main_prod_db.course_item as ci on ci.id = cb.course_item_id and ci.record_status=1
+join main_db_v1_v2_main_prod_db.course as c on c.id = ci.course_id and c.record_status=1
+join
+(select
+distinct s.id,
+sc.course_type,
+case 
+  when delivery_channel = 'L' then TRUE
+  when delivery_channel = 'M' then FALSE
+  else is_laptop
+end as trial_delivery_channel,
+case when s.referral_code is not null or sad.utm_source like '%whjr.site' or sad.utm_campaign = 'Report_Card' then 'Referral' else 'Non-Referral' end as Referral_Flag,
+ci.class_type,
+emi_non_emi,
+sum(0) as week_num,
+sum(0) as projects_completed,
+sum(0) as project_rating,
+sum(0) as quiz_completed,
+sum(0) as quiz_score,
+sum(0) as consumed,
+sum(0) as cancelled,
+sum(0) as count_of_absent,
+sum(0) as revenue,
+sum(0) as credits_purchased,
+sum(0) as credits_refunded
+
+
+from main_db_v1_v2_main_prod_db.student as s
+join main_db_v1_v2_main_prod_db.student_course sc on sc.student_id=s.id and sc.record_status=1
+join main_db_v1_v2_main_prod_db.course_item as ci on ci.id = sc.course_item_id and ci.record_status = 1 
+join main_db_v1_v2_main_prod_db.course as c on c.id = ci.course_id and c.record_status = 1 
+left join main_db_v1_v2_main_prod_db.student_additional_detail sad on sad.student_id=s.id and sad.record_status=1
+left join 
+(
+select
+student_id,
+c.course_type,
+delivery_channel
+from main_db_v1_v2_main_prod_db.class_booking as cb 
+join main_db_v1_v2_main_prod_db.course_item as ci on ci.id = cb.course_item_id and ci.record_status = 1 
+join main_db_v1_v2_main_prod_db.course as c on c.id = ci.course_id and c.record_status = 1
+where cb.record_status=1 and cb.status='completed' and cb.is_trial=1
+) cb1 on cb1.student_id = s.id and cb1.course_type = sc.course_type
+
+join
+(select 
+om1.student_id,
+cc.course_type,
+sum(om1.final_inr_amount) as revenue
+from main_db_v1_v2_main_prod_db.order_master om1 
+join main_db_v1_v2_main_prod_db.course_item as ci on om1.course_item_id = ci.id and ci.record_status=1
+join main_db_v1_v2_main_prod_db.course as cc on cc.id = ci.course_id and cc.record_status = 1 
+where om1.record_status = 1 and om1.status = 'confirmed' and om1.final_inr_amount > 200 
+group by 1,2
+) as om1 on om1.student_id = s.id and om1.course_type=c.course_type
+
+left JOIN
+(
+select
+student_id,
+course_type,
+case when emi_flag>0 then 'EMI' else 'NON_EMI' end as emi_non_emi
+from
+(
+select
+om.student_id,
+c.course_type,
+sum(case when lower(tm.instrument) like '%emi%' then 1 else 0 end) as emi_flag
+from main_db_v1_v2_main_prod_db.order_master om 
+join main_db_v1_v2_main_prod_db.course_item as ci on ci.id = om.course_item_id and ci.record_status=1
+join main_db_v1_v2_main_prod_db.course as c on c.id = ci.course_id and c.record_status=1
+join main_db_v1_v2_main_prod_db.transaction_master tm on tm.order_id=om.id and tm.status='confirmed' and tm.record_status=1
+where om.record_status=1 and om.status='confirmed' and om.final_inr_amount>99
+group by 1,2
+)
+) emi on emi.student_id=s.id and emi.course_type=sc.course_type
+
+where s.country_code='IN' and sc.is_trial = 0 group by 1,2,3,4,5,6) as st on st.id=cb.student_id and st.course_type=c.course_type
+
+where  s.country_code not in ('AF','IO','GL') and s.email not like '%whitehatjr.com%' and s.email not like '%mailinator%'
+and date(convert_timezone('UTC','Asia/Kolkata',cch.updated_at)) between '2021-04-01' and '2021-08-10'
+group by 1,2,3,4,5,6,7
+
+UNION 
+--Quiz completed
+
+select
+distinct sq.student_id as s_id,
+c.course_type,
+st.trial_delivery_channel,
+st.Referral_Flag,
+st.class_type,
+st.emi_non_emi,
+DATEPART(week,date(convert_timezone('UTC','Asia/Kolkata',sq.created_at))) as week_num,
+sum(0) as projects_completed,
+sum(0) as project_rating,
+count(distinct case when sq.status in ('COMPLETED') then sq.id else null end) as quiz_completed,
+avg((case when sq.status in ('COMPLETED','ATTEMPTED') then sq.user_score else 0 end)*1.00) as quiz_score,
+sum(0) as booked,
+sum(0) as consumed,
+sum(0) as cancelled,
+sum(0) as count_of_absent,
+sum(0) as revenue,
+sum(0) as credits_purchased,
+sum(0) as credits_refunded
+
+from main_db_v1_v2_main_prod_db.quiz_tracker as sq
+left join main_db_v1_v2_main_prod_db.student as s on s.id = sq.student_id
+join main_db_v1_v2_main_prod_db.quiz q on q.id = sq.quiz_id 
+join main_db_v1_v2_main_prod_db.quiz_trigger qtr on qtr.quiz_id = sq.quiz_id and qtr.entity_type = 'COURSE_CLASS'
+join main_db_v1_v2_main_prod_db.course_class cc on qtr.entity_id = cc.id
+join main_db_v1_v2_main_prod_db.course c on cc.course_id = c.id
+join
+(select
+distinct s.id,
+sc.course_type,
+case 
+  when delivery_channel = 'L' then TRUE
+  when delivery_channel = 'M' then FALSE
+  else is_laptop
+end as trial_delivery_channel,
+case when s.referral_code is not null or sad.utm_source like '%whjr.site' or sad.utm_campaign = 'Report_Card' then 'Referral' else 'Non-Referral' end as Referral_Flag,
+ci.class_type,
+emi_non_emi,
+sum(0) as week_num,
+sum(0) as projects_completed,
+sum(0) as project_rating,
+sum(0) as quiz_completed,
+sum(0) as quiz_score,
+sum(0) as consumed,
+sum(0) as cancelled,
+sum(0) as count_of_absent,
+sum(0) as revenue,
+sum(0) as credits_purchased,
+sum(0) as credits_refunded
+
+
+from main_db_v1_v2_main_prod_db.student as s
+join main_db_v1_v2_main_prod_db.student_course sc on sc.student_id=s.id and sc.record_status=1
+join main_db_v1_v2_main_prod_db.course_item as ci on ci.id = sc.course_item_id and ci.record_status = 1 
+join main_db_v1_v2_main_prod_db.course as c on c.id = ci.course_id and c.record_status = 1 
+left join main_db_v1_v2_main_prod_db.student_additional_detail sad on sad.student_id=s.id and sad.record_status=1
+left join 
+(
+select
+student_id,
+c.course_type,
+delivery_channel
+from main_db_v1_v2_main_prod_db.class_booking as cb 
+join main_db_v1_v2_main_prod_db.course_item as ci on ci.id = cb.course_item_id and ci.record_status = 1 
+join main_db_v1_v2_main_prod_db.course as c on c.id = ci.course_id and c.record_status = 1
+where cb.record_status=1 and cb.status='completed' and cb.is_trial=1
+) cb1 on cb1.student_id = s.id and cb1.course_type = sc.course_type
+
+join
+(select 
+om1.student_id,
+cc.course_type,
+sum(om1.final_inr_amount) as revenue
+from main_db_v1_v2_main_prod_db.order_master om1 
+join main_db_v1_v2_main_prod_db.course_item as ci on om1.course_item_id = ci.id and ci.record_status=1
+join main_db_v1_v2_main_prod_db.course as cc on cc.id = ci.course_id and cc.record_status = 1 
+where om1.record_status = 1 and om1.status = 'confirmed' and om1.final_inr_amount > 200 
+group by 1,2
+) as om1 on om1.student_id = s.id and om1.course_type=c.course_type
+
+left JOIN
+(
+select
+student_id,
+course_type,
+case when emi_flag>0 then 'EMI' else 'NON_EMI' end as emi_non_emi
+from
+(
+select
+om.student_id,
+c.course_type,
+sum(case when lower(tm.instrument) like '%emi%' then 1 else 0 end) as emi_flag
+from main_db_v1_v2_main_prod_db.order_master om 
+join main_db_v1_v2_main_prod_db.course_item as ci on ci.id = om.course_item_id and ci.record_status=1
+join main_db_v1_v2_main_prod_db.course as c on c.id = ci.course_id and c.record_status=1
+join main_db_v1_v2_main_prod_db.transaction_master tm on tm.order_id=om.id and tm.status='confirmed' and tm.record_status=1
+where om.record_status=1 and om.status='confirmed' and om.final_inr_amount>99
+group by 1,2
+)
+) emi on emi.student_id=s.id and emi.course_type=sc.course_type
+
+where s.country_code='IN' and sc.is_trial = 0 group by 1,2,3,4,5,6) as st on st.id=sq.student_id and st.course_type=c.course_type
+
+where sq.record_status = 1 and date(convert_timezone('UTC','Asia/Kolkata',sq.created_at)) between '2021-04-01' and '2021-08-10'
+group by 1,2,3,4,5,6,7
+
+UNION
+--student projects
+
+select
+distinct sp.student_id as s_id,
+sp.course_type,
+st.trial_delivery_channel,
+st.Referral_Flag,
+st.class_type,
+st.emi_non_emi,
+DATEPART(week,date(convert_timezone('UTC','Asia/Kolkata',sp.start_date))) as week_num,
+COUNT(distinct case when project_status<>'completed' THEN sp.id END) as projects_completed,
+AVG(sp.project_rating*1.00) as project_rating,
+sum(0) as quiz_completed,
+sum(0) as quiz_score,
+sum(0) as booked,
+sum(0) as consumed,
+sum(0) as cancelled,
+sum(0) as count_of_absent,
+sum(0) as revenue,
+sum(0) as credits_purchased,
+sum(0) as credits_refunded
+
+FROM
+(
+Select 
+        sp.id, 
+        sp.student_id, 
+        sp.course_version_class_id, 
+        SP.course_class_id, sp.start_date, first_submission_date, first_completion_date, no_of_submission , 
+        sp.project_rating, sp.status as project_status, first_feedback_date, cc.sequence_no,c.course_type
+        FROM  main_db_v1_v2_main_prod_db.student_project as sp 
+        JOIN main_db_v1_v2_main_prod_db.project as p on p.id=sp.project_id and p.parent_project_id IS NULL
+        JOIN main_db_v1_v2_main_prod_db.course_class as cc on sp.course_class_id=cc.id
+        join main_db_v1_v2_main_prod_db.course as c on c.id=cc.course_id
+        JOIN main_db_v1_v2_main_prod_db.student as s on s.id=sp.student_id
+        LEFT JOIN
+        ( 
+         Select student_project_id, MIN(pe.created_at) as first_submission_date, 
+                           COUNT(distinct pe.id) as no_of_submission
+                           FROM main_db_v1_v2_main_prod_db.project_event as pe 
+                          where pe.event_name='project_submitted' and pe.user_entity_type='student'
+                          group by 1                 
+        ) as PE1 on PE1.student_project_id=sp.id 
+        LEFT JOIN  
+        ( 
+        Select student_project_id, MIN(pe.created_at) as first_completion_date FROM main_db_v1_v2_main_prod_db.project_event as pe 
+            where pe.event_name='completed'
+            group by 1
+        ) as PE2 on PE2.student_project_id=sp.id 
+        LEFT JOIN  
+        ( 
+            Select student_project_id, MIN(pe.created_at) as first_feedback_date FROM main_db_v1_v2_main_prod_db.project_event as pe 
+              where pe.event_name='feedback' 
+              group by 1
+        ) as PE3 on PE3.student_project_id=sp.id 
+        where sp.record_status=1  
+) as SP
+join
+(select
+distinct s.id,
+sc.course_type,
+case 
+  when delivery_channel = 'L' then TRUE
+  when delivery_channel = 'M' then FALSE
+  else is_laptop
+end as trial_delivery_channel,
+case when s.referral_code is not null or sad.utm_source like '%whjr.site' or sad.utm_campaign = 'Report_Card' then 'Referral' else 'Non-Referral' end as Referral_Flag,
+ci.class_type,
+emi_non_emi,
+sum(0) as week_num,
+sum(0) as projects_completed,
+sum(0) as project_rating,
+sum(0) as quiz_completed,
+sum(0) as quiz_score,
+sum(0) as consumed,
+sum(0) as cancelled,
+sum(0) as count_of_absent,
+sum(0) as revenue,
+sum(0) as credits_purchased,
+sum(0) as credits_refunded
+
+
+from main_db_v1_v2_main_prod_db.student as s
+join main_db_v1_v2_main_prod_db.student_course sc on sc.student_id=s.id and sc.record_status=1
+join main_db_v1_v2_main_prod_db.course_item as ci on ci.id = sc.course_item_id and ci.record_status = 1 
+join main_db_v1_v2_main_prod_db.course as c on c.id = ci.course_id and c.record_status = 1 
+left join main_db_v1_v2_main_prod_db.student_additional_detail sad on sad.student_id=s.id and sad.record_status=1
+left join 
+(
+select
+student_id,
+c.course_type,
+delivery_channel
+from main_db_v1_v2_main_prod_db.class_booking as cb 
+join main_db_v1_v2_main_prod_db.course_item as ci on ci.id = cb.course_item_id and ci.record_status = 1 
+join main_db_v1_v2_main_prod_db.course as c on c.id = ci.course_id and c.record_status = 1
+where cb.record_status=1 and cb.status='completed' and cb.is_trial=1
+) cb1 on cb1.student_id = s.id and cb1.course_type = sc.course_type
+
+join
+(select 
+om1.student_id,
+cc.course_type,
+sum(om1.final_inr_amount) as revenue
+from main_db_v1_v2_main_prod_db.order_master om1 
+join main_db_v1_v2_main_prod_db.course_item as ci on om1.course_item_id = ci.id and ci.record_status=1
+join main_db_v1_v2_main_prod_db.course as cc on cc.id = ci.course_id and cc.record_status = 1 
+where om1.record_status = 1 and om1.status = 'confirmed' and om1.final_inr_amount > 200 
+group by 1,2
+) as om1 on om1.student_id = s.id and om1.course_type=c.course_type
+
+left JOIN
+(
+select
+student_id,
+course_type,
+case when emi_flag>0 then 'EMI' else 'NON_EMI' end as emi_non_emi
+from
+(
+select
+om.student_id,
+c.course_type,
+sum(case when lower(tm.instrument) like '%emi%' then 1 else 0 end) as emi_flag
+from main_db_v1_v2_main_prod_db.order_master om 
+join main_db_v1_v2_main_prod_db.course_item as ci on ci.id = om.course_item_id and ci.record_status=1
+join main_db_v1_v2_main_prod_db.course as c on c.id = ci.course_id and c.record_status=1
+join main_db_v1_v2_main_prod_db.transaction_master tm on tm.order_id=om.id and tm.status='confirmed' and tm.record_status=1
+where om.record_status=1 and om.status='confirmed' and om.final_inr_amount>99
+group by 1,2
+)
+) emi on emi.student_id=s.id and emi.course_type=sc.course_type
+
+where s.country_code='IN' and sc.is_trial = 0 group by 1,2,3,4,5,6) as st on st.id=sp.student_id and st.course_type=sp.course_type
+
+where date(convert_timezone('UTC','Asia/Kolkata',sp.start_date)) between '2021-04-01' and '2021-08-10'
+group by 1,2,3,4,5,6,7
+
+
+UNION
+--Credits purchased, Refunded, Revenue
+
+select
+distinct om.student_id as s_id,
+c.course_type,
+st.trial_delivery_channel,
+st.Referral_Flag,
+st.class_type,
+st.emi_non_emi,
+DATEPART(week,date(convert_timezone('UTC','Asia/Kolkata',om.order_confirmed_at))) as week_num,
+sum(0) as projects_completed,
+sum(0) as project_rating,
+sum(0) as quiz_completed,
+sum(0) as quiz_score,
+sum(0) as booked,
+sum(0) as consumed,
+sum(0) as cancelled,
+sum(0) as count_of_absent,
+sum(case when om.status='confirmed' then final_inr_amount end) as revenue,
+sum(case when om.status='confirmed' then om.credits end) as credits_purchased,
+sum(case when om.status='refunded' then om.credits end) as credits_refunded
+
+from main_db_v1_v2_main_prod_db.order_master om
+join main_db_v1_v2_main_prod_db.course_item ci on om.course_item_id = ci.id
+join main_db_v1_v2_main_prod_db.course c on ci.course_id = c.id
+join
+(select
+distinct s.id,
+sc.course_type,
+case 
+  when delivery_channel = 'L' then TRUE
+  when delivery_channel = 'M' then FALSE
+  else is_laptop
+end as trial_delivery_channel,
+case when s.referral_code is not null or sad.utm_source like '%whjr.site' or sad.utm_campaign = 'Report_Card' then 'Referral' else 'Non-Referral' end as Referral_Flag,
+ci.class_type,
+emi_non_emi,
+sum(0) as week_num,
+sum(0) as projects_completed,
+sum(0) as project_rating,
+sum(0) as quiz_completed,
+sum(0) as quiz_score,
+sum(0) as consumed,
+sum(0) as cancelled,
+sum(0) as count_of_absent,
+sum(0) as revenue,
+sum(0) as credits_purchased,
+sum(0) as credits_refunded
+
+
+from main_db_v1_v2_main_prod_db.student as s
+join main_db_v1_v2_main_prod_db.student_course sc on sc.student_id=s.id and sc.record_status=1
+join main_db_v1_v2_main_prod_db.course_item as ci on ci.id = sc.course_item_id and ci.record_status = 1 
+join main_db_v1_v2_main_prod_db.course as c on c.id = ci.course_id and c.record_status = 1 
+left join main_db_v1_v2_main_prod_db.student_additional_detail sad on sad.student_id=s.id and sad.record_status=1
+left join 
+(
+select
+student_id,
+c.course_type,
+delivery_channel
+from main_db_v1_v2_main_prod_db.class_booking as cb 
+join main_db_v1_v2_main_prod_db.course_item as ci on ci.id = cb.course_item_id and ci.record_status = 1 
+join main_db_v1_v2_main_prod_db.course as c on c.id = ci.course_id and c.record_status = 1
+where cb.record_status=1 and cb.status='completed' and cb.is_trial=1
+) cb1 on cb1.student_id = s.id and cb1.course_type = sc.course_type
+
+join
+(select 
+om1.student_id,
+cc.course_type,
+sum(om1.final_inr_amount) as revenue
+from main_db_v1_v2_main_prod_db.order_master om1 
+join main_db_v1_v2_main_prod_db.course_item as ci on om1.course_item_id = ci.id and ci.record_status=1
+join main_db_v1_v2_main_prod_db.course as cc on cc.id = ci.course_id and cc.record_status = 1 
+where om1.record_status = 1 and om1.status = 'confirmed' and om1.final_inr_amount > 200 
+group by 1,2
+) as om1 on om1.student_id = s.id and om1.course_type=c.course_type
+
+left JOIN
+(
+select
+student_id,
+course_type,
+case when emi_flag>0 then 'EMI' else 'NON_EMI' end as emi_non_emi
+from
+(
+select
+om.student_id,
+c.course_type,
+sum(case when lower(tm.instrument) like '%emi%' then 1 else 0 end) as emi_flag
+from main_db_v1_v2_main_prod_db.order_master om 
+join main_db_v1_v2_main_prod_db.course_item as ci on ci.id = om.course_item_id and ci.record_status=1
+join main_db_v1_v2_main_prod_db.course as c on c.id = ci.course_id and c.record_status=1
+join main_db_v1_v2_main_prod_db.transaction_master tm on tm.order_id=om.id and tm.status='confirmed' and tm.record_status=1
+where om.record_status=1 and om.status='confirmed' and om.final_inr_amount>99
+group by 1,2
+)
+) emi on emi.student_id=s.id and emi.course_type=sc.course_type
+
+where s.country_code='IN' and sc.is_trial = 0 group by 1,2,3,4,5,6) as st on st.id=om.student_id and st.course_type=c.course_type
+
+where om.record_status = 1 and final_inr_amount > 0 and date(convert_timezone('UTC','Asia/Kolkata',om.order_confirmed_at)) between '2021-04-01' and '2021-08-10'
+group by 1,2,3,4,5,6,7
+)
+where course_type='CODING'
+group by 1,2,3,4,5,6,7;
